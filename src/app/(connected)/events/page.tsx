@@ -40,21 +40,40 @@ export default function EventsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [showForm, setShowForm] = useState(false);
+  // Pagination and filters for server-side fetching
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [from, setFrom] = useState<string | undefined>(undefined);
+  const [to, setTo] = useState<string | undefined>(undefined);
 
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
+      const qs = new URLSearchParams({
+        page: String(page),
+        limit: String(limit),
+        ...(searchTerm ? { q: searchTerm } : {}),
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+      }).toString();
       const [evRes, uRes] = await Promise.all([
-        fetch("/api/events"),
-        fetch("/api/users"),
+        fetch(`/api/events?${qs}`, { cache: "no-store" }),
+        // Fetch a limited page of users for selectors
+        fetch(`/api/users?page=1&limit=100`),
       ]);
       const ev = await evRes.json();
       const us = await uRes.json();
-      setEvents(ev.data || []);
-      setUsers(us.data || []);
-      if (!actionUserId && (us.data || []).length > 0)
-        setActionUserId((us.data || [])[0].id);
+      setEvents(ev.items || []);
+      setTotal(ev.total || 0);
+      setTotalPages(ev.totalPages || 1);
+      // Keep local page in sync with backend-safe page value if returned
+      if (typeof ev.page === "number" && ev.page !== page) setPage(ev.page);
+      setUsers(us.items || []);
+      if (!actionUserId && (us.items || []).length > 0)
+        setActionUserId((us.items || [])[0].id);
     } catch (e: any) {
       setError(e?.message || "Failed to load data");
     } finally {
@@ -64,7 +83,8 @@ export default function EventsPage() {
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, limit, searchTerm, from, to]);
 
   const resetForm = () => {
     setForm({});
@@ -405,11 +425,11 @@ export default function EventsPage() {
         )}
 
         {/* Events Grid */}
-        <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
-          {filteredEvents.map((event) => (
+        <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6'>
+          {events.map((event) => (
             <div
               key={event.id}
-              className='bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow'
+              className='bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-gray-100'
             >
               {event.imageUrl ? (
                 <img
@@ -515,7 +535,7 @@ export default function EventsPage() {
           ))}
         </div>
 
-        {filteredEvents.length === 0 && (
+        {events.length === 0 && (
           <div className='text-center py-12'>
             <Calendar className='w-16 h-16 text-gray-400 mx-auto mb-4' />
             <h3 className='text-lg font-medium text-gray-900 mb-2'>
@@ -524,6 +544,45 @@ export default function EventsPage() {
             <p className='text-gray-600'>
               Try adjusting your search or create a new event.
             </p>
+          </div>
+        )}
+
+        {/* Pagination Controls */}
+        {events.length > 0 && (
+          <div className='mt-8 flex items-center justify-between'>
+            <div className='text-sm text-gray-600'>
+              Page {page} of {totalPages} • {total} results
+            </div>
+            <div className='flex items-center gap-2'>
+              <button
+                className='px-3 py-2 rounded border text-sm disabled:opacity-50'
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+              >
+                Prev
+              </button>
+              <button
+                className='px-3 py-2 rounded border text-sm disabled:opacity-50'
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+              >
+                Next
+              </button>
+              <select
+                className='ml-2 px-2 py-2 border rounded text-sm'
+                value={limit}
+                onChange={(e) => {
+                  setPage(1);
+                  setLimit(Number(e.target.value));
+                }}
+              >
+                {[12, 20, 24, 48].map((n) => (
+                  <option key={n} value={n}>
+                    {n} / page
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
       </div>

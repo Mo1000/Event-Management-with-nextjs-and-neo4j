@@ -17,6 +17,7 @@
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.539.0",
     "moment": "^2.30.1",
+    "neo4j-driver": "^5.28.1",
     "neode": "^0.4.9",
     "next": "15.4.6",
     "react": "19.1.0",

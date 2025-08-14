@@ -2,10 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { EventService } from "../../../services/eventService";
 
 // GET /api/events - Get all events
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const events = await EventService.getAllEvents();
-    return NextResponse.json({ success: true, data: events });
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1", 10);
+    const limit = parseInt(searchParams.get("limit") || "20", 10);
+    const q = searchParams.get("q") || undefined;
+    const from = searchParams.get("from") || undefined; // ISO string
+    const to = searchParams.get("to") || undefined; // ISO string
+    const includeArchived = (searchParams.get("includeArchived") || "false").toLowerCase() === "true";
+    const countOnly = (searchParams.get("countOnly") || "false").toLowerCase() === "true";
+
+    const result = await EventService.listEvents({ page, limit, q, from, to, includeArchived, countOnly });
+
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return NextResponse.json(
       {

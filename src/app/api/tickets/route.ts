@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { driver } from "../../../utils/driver.utils";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const countOnly = (searchParams.get("countOnly") || "false").toLowerCase() === "true";
+
     const session = driver.session();
+    if (countOnly) {
+      const countRes = await session.run("MATCH (t:Ticket) RETURN count(t) as total");
+      await session.close();
+      const totalVal = countRes.records[0]?.get("total");
+      const total = typeof totalVal?.toNumber === "function" ? totalVal.toNumber() : Number(totalVal) || 0;
+      return NextResponse.json({ success: true, items: [], total, page: 1, limit: 0, totalPages: 1 });
+    }
+
     const result = await session.run("MATCH (t:Ticket) RETURN t");
     await session.close();
 
@@ -21,13 +32,10 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ data: tickets });
+    return NextResponse.json({ success: true, items: tickets, total: tickets.length, page: 1, limit: tickets.length, totalPages: 1 });
   } catch (error) {
     console.error("Error fetching tickets:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch tickets" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: "Failed to fetch tickets" }, { status: 500 });
   }
 }
 

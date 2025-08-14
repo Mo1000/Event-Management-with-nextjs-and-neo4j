@@ -1,6 +1,7 @@
 import moment from "moment";
 import { Event, User, driver } from "../models";
 import { v4 as uuidv4 } from "uuid";
+import neo4j from "neo4j-driver";
 
 export interface CreateEventData {
   title: string;
@@ -64,6 +65,97 @@ export class EventService {
     } catch (error) {
       throw new Error(`Failed to get events: ${error}`);
     }
+  }
+
+  // Get events with pagination, optional search, and date range filters
+  static async listEvents(options: {
+    page?: number;
+    limit?: number;
+    q?: string;
+    from?: string; // ISO string
+    to?: string; // ISO string
+    includeArchived?: boolean;
+    countOnly?: boolean;
+  }) {
+    const {
+      page = 1,
+      limit = 20,
+      q,
+      from,
+      to,
+      includeArchived = false,
+      countOnly = false,
+    } = options || {};
+
+    const skip = (Math.max(1, page) - 1) * Math.max(1, limit);
+
+    // Build WHERE clause
+    const where: string[] = [];
+    const params: Record<string, any> = {};
+    if (!includeArchived) {
+      // Include nodes without isArchived (treat as not archived)
+      where.push("coalesce(e.isArchived, false) = false");
+    }
+    if (q && q.trim()) {
+      where.push(
+        "(toLower(e.title) CONTAINS toLower($q) OR toLower(e.description) CONTAINS toLower($q))"
+      );
+      params.q = q.trim();
+    }
+    if (from) {
+      // Support string or temporal stored values by casting with datetime()
+      where.push(
+        "EXISTS(e.eventDate) AND datetime(e.eventDate) >= datetime($from)"
+      );
+      params.from = from;
+    }
+    if (to) {
+      where.push(
+        "EXISTS(e.eventDate) AND datetime(e.eventDate) <= datetime($to)"
+      );
+      params.to = to;
+    }
+    const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    // Count
+    const countQuery = `MATCH (e:Event) ${whereClause} RETURN count(e) AS total`;
+    const countRes = await (driver as any).cypher(countQuery, params);
+    const totalVal = countRes.records[0]?.get("total");
+    const total =
+      typeof totalVal?.toNumber === "function"
+        ? totalVal.toNumber()
+        : Number(totalVal) || 0;
+
+    let items: any[] = [];
+    if (!countOnly) {
+      // Page of items
+      const listQuery = `
+        MATCH (e:Event)
+        ${whereClause}
+        RETURN e
+        ORDER BY datetime(e.eventDate)
+        SKIP $skip LIMIT $limit
+      `;
+      const listParams = {
+        ...params,
+        skip: neo4j.int(skip),
+        limit: neo4j.int(Math.max(1, limit)),
+      };
+      const listRes = await (driver as any).cypher(listQuery, listParams);
+      items = listRes.records.map((r: any) => {
+        const node = r.get("e");
+        const props = node.properties || {};
+        return { ...props };
+      });
+    }
+
+    return {
+      items,
+      total,
+      page: Math.max(1, page),
+      limit: Math.max(1, limit),
+      totalPages: Math.max(1, Math.ceil(total / Math.max(1, limit))),
+    };
   }
 
   // Get event by ID

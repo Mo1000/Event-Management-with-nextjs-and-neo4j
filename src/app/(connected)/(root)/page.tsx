@@ -34,32 +34,30 @@ export default function Dashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const [eventsRes, usersRes, ticketsRes] = await Promise.all([
-        fetch("/api/events"),
-        fetch("/api/users"),
-        fetch("/api/tickets"),
+      // Fetch totals via countOnly, and small recent lists in parallel
+      const [eventsCntRes, usersCntRes, ticketsCntRes, eventsListRes, usersListRes] = await Promise.all([
+        fetch("/api/events?countOnly=true"),
+        fetch("/api/users?countOnly=true"),
+        fetch("/api/tickets?countOnly=true"),
+        fetch("/api/events?page=1&limit=5"),
+        fetch("/api/users?page=1&limit=5"),
       ]);
 
-      const events = await eventsRes.json();
-      const users = await usersRes.json();
-      const tickets = await ticketsRes.json();
-
-      const eventsData = events.data || [];
-      const usersData = users.data || [];
-      const ticketsData = tickets.data || [];
+      const eventsCnt = await eventsCntRes.json();
+      const usersCnt = await usersCntRes.json();
+      const ticketsCnt = await ticketsCntRes.json();
+      const eventsList = await eventsListRes.json();
+      const usersList = await usersListRes.json();
 
       setStats({
-        totalEvents: eventsData.length,
-        totalUsers: usersData.length,
-        totalTickets: ticketsData.length,
-        totalRevenue: ticketsData.reduce(
-          (sum: number, ticket: ITicket) => sum + (ticket.price || 0),
-          0
-        ),
+        totalEvents: Number(eventsCnt.total || 0),
+        totalUsers: Number(usersCnt.total || 0),
+        totalTickets: Number(ticketsCnt.total || 0),
+        totalRevenue: 0,
       });
 
-      setRecentEvents(eventsData.slice(0, 5));
-      setRecentUsers(usersData.slice(0, 5));
+      setRecentEvents(eventsList.items || []);
+      setRecentUsers(usersList.items || []);
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
     } finally {
