@@ -10,6 +10,7 @@
 
 const Neode = require("neode");
 const { faker } = require("@faker-js/faker");
+const neo4j = require("neo4j-driver");
 
 const DEFAULT_URI = process.env.NEO4J_URI || "neo4j://localhost:7687";
 const DEFAULT_USER = process.env.NEO4J_USER || "neo4j";
@@ -115,9 +116,16 @@ function distributeCounts(total, buckets) {
 
 async function fetchOrganizerIds(neode, limit) {
   // Roles are stored as comma-separated string like "ORGANIZER,ADMIN"; use substring match
-  const res = await neode.readCypher(
-    `MATCH (u:User) WHERE u.roles CONTAINS 'ORGANIZER' RETURN u.id as id LIMIT ${limit}`
-  );
+
+  const query = `
+    MATCH (u:User)
+    WHERE u.roles CONTAINS $role
+    RETURN u.id AS id
+    ORDER BY rand()
+    LIMIT $limit
+  `;
+  const params = { role: "ORGANIZER", limit: neo4j.int(limit) };
+  const res = await neode.readCypher(query, params);
   return res.records.map((rec) => rec.get("id"));
 }
 
