@@ -1,19 +1,25 @@
-"use client";
+'use client';
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import type {
   IAuthContext,
   IUser,
   ILoginForm,
   IRegisterForm,
-} from "../types/models";
+} from '../types/models';
+import {
+  getCookieValue,
+  removeCookie,
+  setCookieValue,
+} from '@/utils/storage/manageCookies';
+import { TOKEN_COOKIE_NAME } from '@/constantes';
 
 const AuthContext = createContext<IAuthContext | undefined>(undefined);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 };
@@ -33,9 +39,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const checkAuthStatus = async () => {
     try {
-      const token = localStorage.getItem("authToken");
+      const token = getCookieValue(TOKEN_COOKIE_NAME);
       if (token) {
-        const response = await fetch("/api/auth/me", {
+        const response = await fetch('/api/auth/me', {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -44,12 +50,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           const userData = await response.json();
           setUser(userData.user);
         } else {
-          localStorage.removeItem("authToken");
+          removeCookie(TOKEN_COOKIE_NAME);
         }
       }
     } catch (error) {
-      console.error("Auth check failed:", error);
-      localStorage.removeItem("authToken");
+      console.error('Auth check failed:', error);
+      removeCookie(TOKEN_COOKIE_NAME);
     } finally {
       setIsLoading(false);
     }
@@ -58,25 +64,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
       setIsLoading(true);
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email, password }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        localStorage.setItem("authToken", data.token);
+        setCookieValue(TOKEN_COOKIE_NAME, data.token);
         setUser(data.user);
         return true;
       } else {
         const error = await response.json();
-        throw new Error(error.message || "Login failed");
+        throw new Error(error.message || 'Login failed');
       }
     } catch (error) {
-      console.error("Login error:", error);
+      console.error('Login error:', error);
       return false;
     } finally {
       setIsLoading(false);
@@ -86,29 +92,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const register = async (userData: Partial<IUser>): Promise<boolean> => {
     try {
       setIsLoading(true);
-      const response = await fetch("/api/auth/register", {
-        method: "POST",
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           ...userData,
-          roles: [userData.roles?.[0] || "USER"],
+          roles: [userData.roles?.[0] || 'USER'],
           isActive: true,
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        localStorage.setItem("authToken", data.token);
+        setCookieValue(TOKEN_COOKIE_NAME, data.token);
         setUser(data.user);
         return true;
       } else {
         const error = await response.json();
-        throw new Error(error.message || "Registration failed");
+        throw new Error(error.message || 'Registration failed');
       }
     } catch (error) {
-      console.error("Registration error:", error);
+      console.error('Registration error:', error);
       return false;
     } finally {
       setIsLoading(false);
@@ -116,7 +122,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem("authToken");
+    removeCookie(TOKEN_COOKIE_NAME);
     setUser(null);
   };
 
